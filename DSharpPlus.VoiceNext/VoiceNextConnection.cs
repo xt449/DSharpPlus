@@ -347,25 +347,21 @@ namespace DSharpPlus.VoiceNext
                     this.Rtp.Decode(header, out seq, out ts, out ssrc, out var has_ext);
                     if (has_ext)
                     {
-                        if (data[0] == 0xBE && data[1] == 0xDE)
-                        {
-                            // RFC 5285, 4.2 One-Byte header
-                            // http://www.rfcreader.com/#rfc5285_line186
-
-                            var hlen = data[2] << 8 | data[3];
-                            var i = 4;
-                            for (; i < hlen + 4; i++)
-                            {
-                                var b = data[i];
-                                // This is unused(?)
-                                //var id = (b >> 4) & 0x0F;
-                                var len = (b & 0x0F) + 1;
-                                i += len;
-                            }
-                            while (data[i] == 0)
-                                i++;
-                            doff = i;
-                        }
+            if(data[0] == 0xBE && data[1] == 0xDE) { // RFC5285 Section 4.2: One-Byte Header
+                var rtpHeaderExtensionLength = data[2] << 8 | data[3];
+                var index = 4;
+                byte bite;
+                for(int j = 0; j < rtpHeaderExtensionLength; ++j) {
+                    bite = data[index];
+                    ++index;
+                    var length = (bite & 0x0F) + 1;
+                    index += length;
+                    while(data[index] == 0) {
+                        ++index;
+                    }
+                }
+                data = data.slice(index);
+            }
                         // TODO: consider implementing RFC 5285, 4.3. Two-Byte Header
                     }
 
