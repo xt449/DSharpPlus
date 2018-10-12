@@ -350,11 +350,8 @@ namespace DSharpPlus.VoiceNext
             if(data[0] == 0xBE && data[1] == 0xDE) { // RFC5285 Section 4.2: One-Byte Header
                 var rtpHeaderExtensionLength = data[2] << 8 | data[3];
                 var index = 4;
-                byte bite;
                 for(int j = 0; j < rtpHeaderExtensionLength; ++j) {
-                    bite = data[index];
-                    ++index;
-                    var length = (bite & 0x0F) + 1;
+                    var length = (data[index] & 0x0F) + 2;
                     index += length;
                     while(data[index] == 0) {
                         ++index;
