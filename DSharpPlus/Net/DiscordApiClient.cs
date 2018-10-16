@@ -99,9 +99,9 @@ namespace DSharpPlus.Net
             return ret;
         }
 
-        private Task<RestResponse> DoRequestAsync(BaseDiscordClient client, RateLimitBucket bucket, Uri url, RestRequestMethod method, IDictionary<string, string> headers = null, string payload = null, double? ratelimit_wait_override = null)
+        private Task<RestResponse> DoRequestAsync(BaseDiscordClient client, RateLimitBucket bucket, Uri url, RestRequestMethod method, IDictionary<string, string> headers = null, string payload = null, double? ratelimitWaitOverride = null)
         {
-            var req = new RestRequest(client, bucket, url, method, headers, payload, ratelimit_wait_override);
+            var req = new RestRequest(client, bucket, url, method, headers, payload, ratelimitWaitOverride);
 
             if (this.Discord != null)
                 this.Discord.DebugLogger.LogTaskFault(this.Rest.ExecuteRequestAsync(req), LogLevel.Error, "REST", "Error while executing request: ");
@@ -112,9 +112,9 @@ namespace DSharpPlus.Net
         }
 
         private Task<RestResponse> DoMultipartAsync(BaseDiscordClient client, RateLimitBucket bucket, Uri url, RestRequestMethod method, IDictionary<string, string> headers = null, IDictionary<string, string> values = null,
-            IDictionary<string, Stream> files = null, double? ratelimit_wait_override = null)
+            IDictionary<string, Stream> files = null, double? ratelimitWaitOverride = null)
         {
-            var req = new MultipartWebRequest(client, bucket, url, method, headers, values, files, ratelimit_wait_override);
+            var req = new MultipartWebRequest(client, bucket, url, method, headers, values, files, ratelimitWaitOverride);
 
             if (this.Discord != null)
                 Discord.DebugLogger.LogTaskFault(this.Rest.ExecuteRequestAsync(req), LogLevel.Error, "REST", "Error while executing request: ");
@@ -403,7 +403,7 @@ namespace DSharpPlus.Net
         #endregion
 
         #region Channel
-        internal async Task<DiscordChannel> CreateGuildChannelAsync(ulong guild_id, string name, ChannelType type, ulong? parent, int? bitrate, int? user_limit, IEnumerable<DiscordOverwriteBuilder> overwrites, bool? nsfw, string reason)
+        internal async Task<DiscordChannel> CreateGuildChannelAsync(ulong guild_id, string name, ChannelType type, ulong? parent, int? bitrate, int? user_limit, IEnumerable<DiscordOverwriteBuilder> overwrites, bool? nsfw, Optional<int?> perUserRateLimit, string reason)
         {
             List<DiscordRestOverwrite> restoverwrites = new List<DiscordRestOverwrite>();
             if (overwrites != null)
@@ -418,7 +418,8 @@ namespace DSharpPlus.Net
                 Bitrate = bitrate,
                 UserLimit = user_limit,
                 PermissionOverwrites = restoverwrites,
-                Nsfw = nsfw
+                Nsfw = nsfw,
+                PerUserRateLimit = perUserRateLimit
             };
 
             var headers = Utilities.GetBaseHeaders();
@@ -433,7 +434,7 @@ namespace DSharpPlus.Net
 
             var ret = JsonConvert.DeserializeObject<DiscordChannel>(res.Response);
             ret.Discord = this.Discord;
-            foreach (var xo in ret._permission_overwrites)
+            foreach (var xo in ret._permissionOverwrites)
             {
                 xo.Discord = this.Discord;
                 xo._channel_id = ret.Id;
@@ -442,7 +443,7 @@ namespace DSharpPlus.Net
             return ret;
         }
 
-        internal Task ModifyChannelAsync(ulong channel_id, string name, int? position, string topic, bool? nsfw, Optional<ulong?> parent, int? bitrate, int? user_limit, string reason)
+        internal Task ModifyChannelAsync(ulong channel_id, string name, int? position, string topic, bool? nsfw, Optional<ulong?> parent, int? bitrate, int? user_limit, Optional<int?> perUserRateLimit, string reason)
         {
             var pld = new RestChannelModifyPayload
             {
@@ -450,10 +451,10 @@ namespace DSharpPlus.Net
                 Position = position,
                 Topic = topic,
                 Nsfw = nsfw,
-                Parent = parent.HasValue ? parent.Value : null,
-                ParentSet = parent.HasValue,
+                Parent = parent,
                 Bitrate = bitrate,
-                UserLimit = user_limit
+                UserLimit = user_limit,
+                PerUserRateLimit = perUserRateLimit
             };
 
             var headers = Utilities.GetBaseHeaders();
@@ -477,7 +478,7 @@ namespace DSharpPlus.Net
 
             var ret = JsonConvert.DeserializeObject<DiscordChannel>(res.Response);
             ret.Discord = this.Discord;
-            foreach (var xo in ret._permission_overwrites)
+            foreach (var xo in ret._permissionOverwrites)
             {
                 xo.Discord = this.Discord;
                 xo._channel_id = ret.Id;
@@ -618,7 +619,7 @@ namespace DSharpPlus.Net
             var channels_raw = JsonConvert.DeserializeObject<IEnumerable<DiscordChannel>>(res.Response).Select(xc => { xc.Discord = this.Discord; return xc; });
 
             foreach (var ret in channels_raw)
-                foreach (var xo in ret._permission_overwrites)
+                foreach (var xo in ret._permissionOverwrites)
                 {
                     xo.Discord = this.Discord;
                     xo._channel_id = ret.Id;
@@ -1638,7 +1639,7 @@ namespace DSharpPlus.Net
             var bucket = this.Rest.GetBucket(RestRequestMethod.PUT, route, new { channel_id, message_id, emoji }, out var path);
 
             var url = Utilities.GetApiUriFor(path);
-            return this.DoRequestAsync(this.Discord, bucket, url, RestRequestMethod.PUT, ratelimit_wait_override: 0.26);
+            return this.DoRequestAsync(this.Discord, bucket, url, RestRequestMethod.PUT, ratelimitWaitOverride: 0.26);
         }
 
         internal Task DeleteOwnReactionAsync(ulong channel_id, ulong message_id, string emoji)
@@ -1647,7 +1648,7 @@ namespace DSharpPlus.Net
             var bucket = this.Rest.GetBucket(RestRequestMethod.DELETE, route, new { channel_id, message_id, emoji }, out var path);
 
             var url = Utilities.GetApiUriFor(path);
-            return this.DoRequestAsync(this.Discord, bucket, url, RestRequestMethod.DELETE, ratelimit_wait_override: 0.26);
+            return this.DoRequestAsync(this.Discord, bucket, url, RestRequestMethod.DELETE, ratelimitWaitOverride: 0.26);
         }
 
         internal Task DeleteUserReactionAsync(ulong channel_id, ulong message_id, ulong user_id, string emoji, string reason)
@@ -1660,7 +1661,7 @@ namespace DSharpPlus.Net
             var bucket = this.Rest.GetBucket(RestRequestMethod.DELETE, route, new { channel_id, message_id, emoji, user_id }, out var path);
 
             var url = Utilities.GetApiUriFor(path);
-            return this.DoRequestAsync(this.Discord, bucket, url, RestRequestMethod.DELETE, headers, ratelimit_wait_override: 0.26);
+            return this.DoRequestAsync(this.Discord, bucket, url, RestRequestMethod.DELETE, headers, ratelimitWaitOverride: 0.26);
         }
 
         internal async Task<IReadOnlyList<DiscordUser>> GetReactionsAsync(ulong channel_id, ulong message_id, string emoji)
@@ -1700,7 +1701,7 @@ namespace DSharpPlus.Net
             var bucket = this.Rest.GetBucket(RestRequestMethod.DELETE, route, new { channel_id, message_id }, out var path);
 
             var url = Utilities.GetApiUriFor(path);
-            return this.DoRequestAsync(this.Discord, bucket, url, RestRequestMethod.DELETE, headers, ratelimit_wait_override: 0.26);
+            return this.DoRequestAsync(this.Discord, bucket, url, RestRequestMethod.DELETE, headers, ratelimitWaitOverride: 0.26);
         }
         #endregion
 
