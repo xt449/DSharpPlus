@@ -72,7 +72,7 @@ namespace DSharpPlus.Entities
         /// </summary>
         [JsonIgnore]
         public IEnumerable<DiscordRole> Roles 
-            => this.RoleIds.Select(xid => this.Guild.Roles.FirstOrDefault(xr => xr.Id == xid));
+            => this.RoleIds.Select(id => this.Guild.GetRole(id));
 
         /// <summary>
         /// Gets the color associated with this user's top color-giving role, otherwise 0 (no color).
@@ -112,7 +112,7 @@ namespace DSharpPlus.Entities
         /// </summary>
         [JsonIgnore]
         public DiscordVoiceState VoiceState 
-            => this.Discord.Guilds[this._guild_id].VoiceStates.FirstOrDefault(xvs => xvs.UserId == this.Id);
+            => this.Discord.Guilds[this._guild_id].VoiceStates.TryGetValue(this.Id, out var voiceState) ? voiceState : null;
 
         [JsonIgnore]
         internal ulong _guild_id = 0;
@@ -136,7 +136,7 @@ namespace DSharpPlus.Entities
         /// </summary>
         [JsonIgnore]
         public int Hierarchy
-            => this.IsOwner ? int.MaxValue : this.Roles.Max(x => x.Position);
+            => this.IsOwner ? int.MaxValue : this.RoleIds.Count == 0 ? 0 : this.Roles.Max(x => x.Position);
 
         #region Overriden user properties
         [JsonIgnore]
@@ -148,8 +148,8 @@ namespace DSharpPlus.Entities
         /// </summary>
         public override string Username
         {
-            get { return this.User.Username; }
-            internal set { this.User.Username = value; }
+            get => this.User.Username;
+            internal set => this.User.Username = value;
         }
 
         /// <summary>
@@ -157,8 +157,8 @@ namespace DSharpPlus.Entities
         /// </summary>
         public override string Discriminator
         {
-            get { return this.User.Discriminator; }
-            internal set { this.User.Discriminator = value; }
+            get => this.User.Discriminator;
+            internal set => this.User.Discriminator = value;
         }
 
         /// <summary>
@@ -166,8 +166,8 @@ namespace DSharpPlus.Entities
         /// </summary>
         public override string AvatarHash
         {
-            get { return this.User.AvatarHash; }
-            internal set { this.User.AvatarHash = value; }
+            get => this.User.AvatarHash;
+            internal set => this.User.AvatarHash = value;
         }
 
         /// <summary>
@@ -175,8 +175,8 @@ namespace DSharpPlus.Entities
         /// </summary>
         public override bool IsBot
         {
-            get { return this.User.IsBot; }
-            internal set { this.User.IsBot = value; }
+            get => this.User.IsBot;
+            internal set => this.User.IsBot = value;
         }
 
         /// <summary>
@@ -184,8 +184,8 @@ namespace DSharpPlus.Entities
         /// </summary>
         public override string Email
         {
-            get { return this.User.Email; }
-            internal set { this.User.Email = value; }
+            get => this.User.Email;
+            internal set => this.User.Email = value;
         }
 
         /// <summary>
@@ -193,8 +193,8 @@ namespace DSharpPlus.Entities
         /// </summary>
         public override bool? MfaEnabled
         {
-            get { return this.User.MfaEnabled; }
-            internal set { this.User.MfaEnabled = value; }
+            get => this.User.MfaEnabled;
+            internal set => this.User.MfaEnabled = value;
         }
 
         /// <summary>
@@ -202,8 +202,17 @@ namespace DSharpPlus.Entities
         /// </summary>
         public override bool? Verified
         {
-            get { return this.User.Verified; }
-            internal set { this.User.Verified = value; }
+            get => this.User.Verified;
+            internal set => this.User.Verified = value;
+        }
+
+        /// <summary>
+        /// Gets the user's chosen language
+        /// </summary>
+        public override string Locale
+        {
+            get => this.User.Locale;
+            internal set => this.User.Locale = value;
         }
         #endregion
 
@@ -259,6 +268,9 @@ namespace DSharpPlus.Entities
         /// <returns>The sent message.</returns>
         public async Task<DiscordMessage> SendFileAsync(FileStream fileData, string content = null, bool is_tts = false, DiscordEmbed embed = null)
         {
+            if (this.IsBot && this.Discord.CurrentUser.IsBot)
+                throw new ArgumentException("Bots cannot DM each other");
+
             var chn = await this.CreateDmChannelAsync().ConfigureAwait(false);
             return await chn.SendFileAsync(fileData, content, is_tts, embed).ConfigureAwait(false);
         }
@@ -273,6 +285,9 @@ namespace DSharpPlus.Entities
         /// <returns>The sent message.</returns>
         public async Task<DiscordMessage> SendFileAsync(string filePath, string content = null, bool is_tts = false, DiscordEmbed embed = null)
         {
+            if (this.IsBot && this.Discord.CurrentUser.IsBot)
+                throw new ArgumentException("Bots cannot DM each other");
+
             var chn = await this.CreateDmChannelAsync().ConfigureAwait(false);
             return await chn.SendFileAsync(filePath, content, is_tts, embed).ConfigureAwait(false);
         }
@@ -288,6 +303,9 @@ namespace DSharpPlus.Entities
         /// <returns>The sent message.</returns>
         public async Task<DiscordMessage> SendMultipleFilesAsync(Dictionary<string, Stream> files, string content = null, bool is_tts = false, DiscordEmbed embed = null)
         {
+            if (this.IsBot && this.Discord.CurrentUser.IsBot)
+                throw new ArgumentException("Bots cannot DM each other");
+
             var chn = await this.CreateDmChannelAsync().ConfigureAwait(false);
             return await chn.SendMultipleFilesAsync(files, content, is_tts, embed).ConfigureAwait(false);
         }
@@ -320,22 +338,23 @@ namespace DSharpPlus.Entities
             var mdl = new MemberEditModel();
             action(mdl);
 
-            if (mdl.VoiceChannel.HasValue && mdl.VoiceChannel.Value.Type != ChannelType.Voice)
+            if (mdl.VoiceChannel.HasValue && mdl.VoiceChannel.Value != null && mdl.VoiceChannel.Value.Type != ChannelType.Voice)
                 throw new ArgumentException("Given channel is not a voice channel.", nameof(mdl.VoiceChannel));
 
             if (mdl.Nickname.HasValue && this.Discord.CurrentUser.Id == this.Id)
             {
                 await this.Discord.ApiClient.ModifyCurrentMemberNicknameAsync(this.Guild.Id, mdl.Nickname.Value,
                     mdl.AuditLogReason).ConfigureAwait(false);
-                await this.Discord.ApiClient.ModifyGuildMemberAsync(this.Guild.Id, this.Id, Optional<string>.FromNoValue(),
+
+                await this.Discord.ApiClient.ModifyGuildMemberAsync(this.Guild.Id, this.Id, Optional.FromNoValue<string>(),
                     mdl.Roles.IfPresent(e => e.Select(xr => xr.Id)), mdl.Muted, mdl.Deafened,
-                    mdl.VoiceChannel.IfPresent(e => e.Id), mdl.AuditLogReason).ConfigureAwait(false);
+                    mdl.VoiceChannel.IfPresent(e => e?.Id), mdl.AuditLogReason).ConfigureAwait(false);
             }
             else
             {
                 await this.Discord.ApiClient.ModifyGuildMemberAsync(this.Guild.Id, this.Id, mdl.Nickname,
                     mdl.Roles.IfPresent(e => e.Select(xr => xr.Id)), mdl.Muted, mdl.Deafened,
-                    mdl.VoiceChannel.IfPresent(e => e.Id), mdl.AuditLogReason).ConfigureAwait(false);
+                    mdl.VoiceChannel.IfPresent(e => e?.Id), mdl.AuditLogReason).ConfigureAwait(false);
             }
         }
 
@@ -383,6 +402,7 @@ namespace DSharpPlus.Entities
         /// </summary>
         /// <param name="reason">Reason for audit logs.</param>
         /// <returns></returns>
+        /// <remarks>[alias="KickAsync"]</remarks>
         public Task RemoveAsync(string reason = null)
             => this.Discord.ApiClient.RemoveGuildMemberAsync(this._guild_id, this.Id, reason);
 

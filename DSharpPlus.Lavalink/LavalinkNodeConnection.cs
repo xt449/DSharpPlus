@@ -14,7 +14,7 @@ using DSharpPlus.Entities;
 using DSharpPlus.EventArgs;
 using DSharpPlus.Lavalink.Entities;
 using DSharpPlus.Lavalink.EventArgs;
-using DSharpPlus.Net.Udp;
+using DSharpPlus.Net;
 using DSharpPlus.Net.WebSocket;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -183,8 +183,7 @@ namespace DSharpPlus.Lavalink
             foreach (var kvp in this.ConnectedGuilds)
                 kvp.Value.Disconnect();
 
-            if (this.NodeDisconnected != null)
-                this.NodeDisconnected(this);
+            this.NodeDisconnected?.Invoke(this);
 
             Volatile.Write(ref this._isDisposed, true);
             await this.WebSocket.DisconnectAsync(null).ConfigureAwait(false);
@@ -242,7 +241,7 @@ namespace DSharpPlus.Lavalink
         /// <param name="guild">Guild to get connection for.</param>
         /// <returns>Channel connection, which allows for playback control.</returns>
         public LavalinkGuildConnection GetConnection(DiscordGuild guild)
-            => this.ConnectedGuilds.ContainsKey(guild.Id) ? this.ConnectedGuilds[guild.Id] : null;
+            => this.ConnectedGuilds.TryGetValue(guild.Id, out LavalinkGuildConnection lgc) && lgc.IsConnected ? lgc : null;
         
         /// <summary>
         /// Searches YouTube for specified terms.
@@ -388,13 +387,20 @@ namespace DSharpPlus.Lavalink
                             if (this.ConnectedGuilds.TryGetValue(guildId, out var lvl_evtf))
                                 await lvl_evtf.InternalPlaybackFinishedAsync(new TrackFinishData { Track = jsonData["track"].ToString(), Reason = reason }).ConfigureAwait(false);
                             break;
+
                         case EventType.TrackStuckEvent:
                             if (this.ConnectedGuilds.TryGetValue(guildId, out var lvl_evts))
                                 await lvl_evts.InternalTrackStuckAsync(new TrackStuckData { Track = jsonData["track"].ToString(), Threshold = (long)jsonData["thresholdMs"] }).ConfigureAwait(false);
                             break;
+
                         case EventType.TrackExceptionEvent:
                             if (this.ConnectedGuilds.TryGetValue(guildId, out var lvl_evte))
                                 await lvl_evte.InternalTrackExceptionAsync(new TrackExceptionData { Track = jsonData["track"].ToString(), Error = jsonData["error"].ToString() }).ConfigureAwait(false);
+                            break;
+
+                        case EventType.WebSocketClosedEvent:
+                            if (this.ConnectedGuilds.TryGetValue(guildId, out var lvl_ewsce))
+                                await lvl_ewsce.InternalWebSocketClosedAsync(new WebSocketCloseEventArgs(jsonData["code"].ToObject<int>(), jsonData["reason"].ToString(), jsonData["byRemote"].ToObject<bool>())).ConfigureAwait(false);
                             break;
                     }
                     break;
